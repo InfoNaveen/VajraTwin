@@ -1,20 +1,14 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// https://vitejs.dev/config/
+// VajraTwin GCS — Vite config.
+// The frontend talks to the FastAPI backend via VITE_API_BASE_URL
+// (see services/api.ts); no build-time proxy is required.
 export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    // Proxy local /api calls to API Gateway during development
-    // Replace the target with your `sam local start-api` address or deployed URL
-    proxy: {
-      "/api": {
-        target: "http://127.0.0.1:3000",
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
-    },
+    host: true,
   },
   build: {
     outDir: "dist",
