@@ -24,11 +24,17 @@ fully functional.
 
 ## Demo sequence
 
-1. **Open the GCS** at http://localhost:5173. The **Fleet Overview** loads.
+1. **Open the GCS** at http://localhost:5173. The **Fleet Overview** loads and
+   begins progressing on its own — while the fleet view is open, the frontend
+   calls `POST /api/fleet/tick` on an interval, which advances all six engine
+   twins through their real pipeline. Sim time, mission phases and health
+   evolve live (not a static projection).
 2. **Show 6 UAVs** (UAV-001 … UAV-006) with health, status and RUL. Note the
    initial distribution (healthy + a couple needing attention) comes from the
    real diagnostic pipeline, not hardcoded numbers.
 3. **Select UAV-002** → the single-engine **Digital Twin** dashboard opens.
+   (Entering the engine view stops the fleet loop and hands ticking to this one
+   engine, so no engine is ever advanced twice.)
 4. Click **START** in the Simulation Control Center.
 5. **Show healthy operation**: health ~85+, fault NORMAL, advisory **GO**,
    residuals near zero, twin "SYNCHRONISED".

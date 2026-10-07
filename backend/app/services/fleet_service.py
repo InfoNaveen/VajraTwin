@@ -31,6 +31,7 @@ Status mapping (reuses existing advisory states, no new state machine)
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
@@ -84,13 +85,21 @@ class FleetService:
     def __init__(self) -> None:
         self.aircraft: Dict[str, FleetAircraft] = {}
         self._initialised = False
+        # Serialises all fleet mutations (init, tick, scenario, reset) so a
+        # tick can never interleave with a reset and corrupt engine state, and
+        # overlapping frontend requests can never double-advance an engine.
+        self._lock = asyncio.Lock()
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     async def ensure_initialised(self) -> None:
         if self._initialised:
             return
-        await self._build_fleet()
-        self._initialised = True
+        async with self._lock:
+            # re-check inside the lock (another request may have initialised)
+            if self._initialised:
+                return
+            await self._build_fleet()
+            self._initialised = True
 
     async def _build_fleet(self) -> None:
         self.aircraft.clear()
@@ -209,6 +218,26 @@ class FleetService:
             })
         return out
 
+    # ── fleet-owned progression ──────────────────────────────────────────────
+    async def tick_all(self, dt_s: float = 1.5) -> Dict[str, Any]:
+        """
+        Advance EVERY fleet engine by one frame through the real
+        EngineService.simulate_tick() pipeline, then return the aggregated
+        fleet summary.
+
+        This is the ONLY way the fleet progresses. It mutates state, so it is
+        exposed via POST (never via a GET). The lock guarantees that fleet
+        ticks never overlap each other or interleave with scenario/reset.
+        """
+        await self.ensure_initialised()
+        async with self._lock:
+            for ac in self.aircraft.values():
+                svc = ac.service
+                if svc.simulator.state.running and not svc.simulator.state.paused:
+                    await svc.simulate_tick(real_dt_s=dt_s, persist=False)
+        # summary() takes the lock itself for the read-aggregate; call outside
+        return await self.summary()
+
     # ── fleet summary ───────────────────────────────────────────────────────────
     async def summary(self) -> Dict[str, Any]:
         await self.ensure_initialised()
@@ -249,30 +278,34 @@ class FleetService:
     # ── control passthrough (reuses EngineService / simulator) ──────────────────
     async def set_scenario(self, uav_id: str, scenario: str, severity: Optional[float]) -> Dict[str, Any]:
         await self.ensure_initialised()
-        ac = self.aircraft.get(uav_id)
-        if not ac:
+        if uav_id not in self.aircraft:
             raise KeyError(uav_id)
-        svc = ac.service
-        if not svc.simulator.state.running:
-            svc.simulator.start()
-        svc.simulator.set_scenario(scenario)
-        if severity is not None:
-            svc.simulator.set_fault_severity(severity)
-        return svc.simulation_status()
+        async with self._lock:
+            ac = self.aircraft[uav_id]
+            svc = ac.service
+            if not svc.simulator.state.running:
+                svc.simulator.start()
+            svc.simulator.set_scenario(scenario)
+            if severity is not None:
+                svc.simulator.set_fault_severity(severity)
+            return svc.simulation_status()
 
     async def reset_aircraft(self, uav_id: str) -> Dict[str, Any]:
         """Reset a single aircraft back to its deterministic initial state."""
         await self.ensure_initialised()
-        ac = self.aircraft.get(uav_id)
-        if not ac:
+        if uav_id not in self.aircraft:
             raise KeyError(uav_id)
-        await self._prime_aircraft(ac)
-        return self._aircraft_state(ac)
+        async with self._lock:
+            ac = self.aircraft[uav_id]
+            await self._prime_aircraft(ac)
+            return self._aircraft_state(ac)
 
     async def reset_fleet(self) -> None:
         """Rebuild the entire deterministic demo fleet."""
-        self._initialised = False
-        await self.ensure_initialised()
+        async with self._lock:
+            self._initialised = False
+            await self._build_fleet()
+            self._initialised = True
 
 
 # ── singleton ─────────────────────────────────────────────────────────────────

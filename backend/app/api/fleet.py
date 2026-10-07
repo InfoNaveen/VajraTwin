@@ -22,6 +22,16 @@ async def fleet_aircraft():
     return await get_fleet_service().list_aircraft()
 
 
+@router.post("/tick")
+async def fleet_tick(dt: float = 1.5):
+    """
+    Advance ALL six fleet engines by one frame through the real engine
+    pipeline, then return the aggregated fleet summary. This is how Fleet
+    Operations progresses — GET endpoints remain read-only.
+    """
+    return await get_fleet_service().tick_all(dt_s=dt)
+
+
 @router.get("/{uav_id}")
 async def fleet_aircraft_detail(uav_id: str):
     detail = await get_fleet_service().aircraft_detail(uav_id)

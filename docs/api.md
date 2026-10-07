@@ -56,9 +56,12 @@ This page is a convenience summary only; it is not duplicated spec.
 | GET | `/api/fleet/summary` |
 | GET | `/api/fleet/aircraft` |
 | GET | `/api/fleet/{uav_id}` |
+| POST | `/api/fleet/tick?dt=1.5` — advances all six engines one frame, returns summary |
 | POST | `/api/fleet/{uav_id}/scenario` |
 | POST | `/api/fleet/{uav_id}/reset` |
 | POST | `/api/fleet/reset` |
+
+> **Fleet progression.** Fleet Operations advances only through `POST /api/fleet/tick`, which steps every `EngineService` via `simulate_tick()` under an async lock and re-aggregates. GET endpoints are read-only and never mutate state. The frontend `useFleet` hook calls `fleet/tick` on an interval while the Fleet view is active, and stops when you drill into an individual engine (so no engine is ever ticked twice).
 
 ### Dashboard
 | Method | Path |

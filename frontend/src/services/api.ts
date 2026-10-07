@@ -146,6 +146,8 @@ export const api = {
 
   // ── Fleet ──────────────────────────────────────────────────────────────────
   fleetSummary: () => request<FleetSummary>("GET", "/api/fleet/summary", undefined, 15000),
+  fleetTick: (dt = 1.5) =>
+    request<FleetSummary>("POST", `/api/fleet/tick?dt=${dt}`, undefined, 15000),
   fleetAircraft: () => request<FleetAircraftState[]>("GET", "/api/fleet/aircraft"),
   fleetDetail: (uavId: string) =>
     request<FleetAircraftState>("GET", `/api/fleet/${encodeURIComponent(uavId)}`),
